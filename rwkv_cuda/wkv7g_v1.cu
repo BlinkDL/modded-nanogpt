@@ -190,7 +190,7 @@ __global__ void kernel_backward_rwkv(const int B, const int T, const int C, cons
             ww[n] = -__expf(float(_w[b_t_h+n]));
             w[n] = __expf(ww[n]);
             ww[n] = ww[n] * w[n];
-            winv[n] = 1.0 / w[n];
+            winv[n] = 1.0f / w[n];
         }
 
         for (int j = 0; j < _N_; j++)
