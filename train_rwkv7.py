@@ -623,7 +623,7 @@ model = model.cuda()
 # config.coordinate_descent_tuning = True # suggested by @Chillee
 # config.coordinate_descent_check_all_directions = True
 config.max_autotune = True
-torch._dynamo.config.optimize_ddp=False
+torch._dynamo.config.optimize_ddp = False
 
 model = torch.compile(model)
 # here we wrap model into DDP container
