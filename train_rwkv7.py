@@ -71,7 +71,7 @@ if not cmd_args.wind_cuda:
     CHUNK_LEN = 16
 
     load(name="wkv7g", sources=["rwkv_cuda/wkv7g_op.cpp", f"rwkv_cuda/wkv7g_v1.cu"], is_python_module=False,
-                        verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}", f"-D_T_={T}", f"-D_CHUNK_LEN_={CHUNK_LEN}"])
+                        verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}", f"-D_T_={T}", f"-D_CHUNK_LEN_={CHUNK_LEN}", "-DNDEBUG"])
     class WKV_7g(torch.autograd.Function):
         @staticmethod
         def forward(ctx, r, w, k, v, a, b):
@@ -88,12 +88,21 @@ if not cmd_args.wind_cuda:
                 assert v.dtype == DTYPE
                 assert a.dtype == DTYPE
                 assert b.dtype == DTYPE
-                assert r.is_contiguous()
-                assert w.is_contiguous()
-                assert k.is_contiguous()
-                assert v.is_contiguous()
-                assert a.is_contiguous()
-                assert b.is_contiguous()
+                # is_contiguous() causes graph breaks
+                # assert r.is_contiguous()
+                # assert w.is_contiguous()
+                # assert k.is_contiguous()
+                # assert v.is_contiguous()
+                # assert a.is_contiguous()
+                # assert b.is_contiguous()
+
+                r = r.contiguous()
+                w = w.contiguous()
+                k = k.contiguous()
+                v = v.contiguous()
+                a = a.contiguous()
+                b = b.contiguous()
+
                 ctx.B = B
                 ctx.T = T
                 ctx.C = C
@@ -114,7 +123,10 @@ if not cmd_args.wind_cuda:
                 H = ctx.H
                 A = T // CHUNK_LEN
                 assert gy.dtype == DTYPE
-                assert gy.is_contiguous()
+                # assert gy.is_contiguous()
+
+                gy = gy.contiguous()
+
                 r, w, k, v, a, b, saa, sss = ctx.saved_tensors
                 gr = torch.empty((B, T, C), device=gy.device, requires_grad=False, dtype=DTYPE, memory_format=torch.contiguous_format)#.zero_()#.uniform_(-100, 100)
                 gw = torch.empty((B, T, C), device=gy.device, requires_grad=False, dtype=DTYPE, memory_format=torch.contiguous_format)#.zero_()#.uniform_(-100, 100)
@@ -128,7 +140,7 @@ if not cmd_args.wind_cuda:
                 del sss
                 del zzz
                 return (gr, gw, gk, gv, ga, gb)
-    @torch.compiler.disable
+    # @torch.compiler.disable
     def RUN_CUDA_RWKV7g(r, w, k, v, a, b):
         return WKV_7g.apply(r, w, k, v, a, b)
 
@@ -607,8 +619,12 @@ x, y = train_loader.next_batch()
 num_vocab = 50304
 model = GPT(GPTConfig(vocab_size=num_vocab, n_layer=12, n_head=768//HEAD_SIZE, n_embd=768))
 model = model.cuda()
-if hasattr(config, "coordinate_descent_tuning"):
-    config.coordinate_descent_tuning = True # suggested by @Chillee
+
+# config.coordinate_descent_tuning = True # suggested by @Chillee
+# config.coordinate_descent_check_all_directions = True
+config.max_autotune = True
+torch._dynamo.config.optimize_ddp=False
+
 model = torch.compile(model)
 # here we wrap model into DDP container
 model = DDP(model, device_ids=[ddp_local_rank])
