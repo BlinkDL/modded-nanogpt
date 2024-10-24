@@ -1,5 +1,7 @@
 #include <torch/extension.h>
-#include "ATen/ATen.h"
+
+#include <c10/core/DispatchKey.h>
+#include <torch/library.h>
 
 typedef at::BFloat16 bf16;
 
